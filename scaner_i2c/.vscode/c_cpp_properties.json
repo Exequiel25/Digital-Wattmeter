@@ -8,8 +8,8 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "/home/exequiel/Documents/Projects/Measurement/Digital Wattmeter/Code_DWattmeter/Inc",
-                "/home/exequiel/Documents/Projects/Measurement/Digital Wattmeter/Code_DWattmeter/Src",
+                "/home/exequiel/Documents/Projects/Measurement/Digital Wattmeter/scaner_i2c/Inc",
+                "/home/exequiel/Documents/Projects/Measurement/Digital Wattmeter/scaner_i2c/Src",
                 "/home/exequiel/.platformio/packages/framework-stm32cubef1/Drivers/CMSIS/Include",
                 "/home/exequiel/.platformio/packages/framework-stm32cubef1/Drivers/CMSIS/Device/ST/STM32F1xx/Include",
                 "/home/exequiel/.platformio/packages/framework-stm32cubef1/Drivers/STM32F1xx_HAL_Driver/Inc",
@@ -61,8 +61,8 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "/home/exequiel/Documents/Projects/Measurement/Digital Wattmeter/Code_DWattmeter/Inc",
-                    "/home/exequiel/Documents/Projects/Measurement/Digital Wattmeter/Code_DWattmeter/Src",
+                    "/home/exequiel/Documents/Projects/Measurement/Digital Wattmeter/scaner_i2c/Inc",
+                    "/home/exequiel/Documents/Projects/Measurement/Digital Wattmeter/scaner_i2c/Src",
                     "/home/exequiel/.platformio/packages/framework-stm32cubef1/Drivers/CMSIS/Include",
                     "/home/exequiel/.platformio/packages/framework-stm32cubef1/Drivers/CMSIS/Device/ST/STM32F1xx/Include",
                     "/home/exequiel/.platformio/packages/framework-stm32cubef1/Drivers/STM32F1xx_HAL_Driver/Inc",
@@ -113,7 +113,7 @@
                 ]
             },
             "defines": [
-                "PLATFORMIO=60105",
+                "PLATFORMIO=60104",
                 "STM32F1",
                 "STM32F103xB",
                 "USE_HAL_DRIVER",

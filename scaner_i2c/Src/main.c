@@ -1,20 +1,37 @@
 /* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2022 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "adc.h"
 #include "i2c.h"
-#include "tim.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
 #include <stdio.h>
-#include "lcd_i2c.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -23,24 +40,28 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint8_t refresh_count = 0;
-char buf_lcd[18];
 
-const char phi[8] = {0x04, 0x04, 0x0E, 0x15, 0x15, 0x0E, 0x04, 0x04};
+uint8_t msg1[] = "Escaneando I2C address...\n\r";
+uint8_t msg2[30] = " ";
+uint8_t ack;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
 /* USER CODE END 0 */
 
 /**
@@ -50,6 +71,7 @@ void SystemClock_Config(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -58,41 +80,34 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
+
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C1_Init();
-  MX_ADC1_Init();
-  MX_TIM2_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  HAL_TIM_Base_Start_IT(&htim2);
-  HAL_ADC_Start(&hadc1);
+  HAL_UART_Transmit(&huart1, msg1, sizeof(msg1), 0xFFFF);
+  HAL_GPIO_WritePin(BUILDIN_LED_GPIO_Port, BUILDIN_LED_Pin, GPIO_PIN_SET); // indicar que funciona
 
-  Lcd_Init();
-  Lcd_Clear();
-	Lcd_CGRAM_CreateChar(0, phi);
-  
-  Lcd_Set_Cursor(1,0);
-  Lcd_Send_String("V=");
-  // Lcd_Set_Cursor(2,0);
-  // Lcd_Send_String("I=");
-  // Lcd_Set_Cursor(1,7);
-  // Lcd_Send_String("P=");
-  // Lcd_Set_Cursor(2,7);
-  // Lcd_CGRAM_WriteChar(0);
-
-  // Lcd_Set_Cursor(1,11);
-  // Lcd_Send_String("S=");
-  // Lcd_Set_Cursor(2,11);
-  // Lcd_Send_String("f=");
+  for (uint8_t i = 0; i < 128; i++)
+  {
+    ack = HAL_I2C_IsDeviceReady(&hi2c1, i << 1, 1, 100);
+    if (ack == HAL_OK)
+    {
+      sprintf((char*)msg2, "Dispositivo encontrado: 0x%02X", i);
+      HAL_UART_Transmit(&huart1, msg2, sizeof(msg2), 0xFFFF);
+    }
+  }
 
   /* USER CODE END 2 */
 
@@ -103,34 +118,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
-    HAL_ADC_Start(&hadc1);
-    int adc1_value = HAL_ADC_GetValue(&hadc1);
-    float voltage = (float)adc1_value * 3.3 / 4095;
-    if (voltage > 2.5)
-    {
-      HAL_GPIO_WritePin(ALERT_LED_GPIO_Port, ALERT_LED_Pin, GPIO_PIN_SET);
-    }
-    else
-    {
-      HAL_GPIO_WritePin(ALERT_LED_GPIO_Port, ALERT_LED_Pin, GPIO_PIN_RESET);
-    }
-
-    if (refresh_count == 2)
-    {
-      Lcd_Clear();
-      Lcd_Set_Cursor(1,1);
-      sprintf(buf_lcd, "ADC:%u", adc1_value);
-      Lcd_Send_String(buf_lcd);
-      Lcd_Set_Cursor(2,1);
-      int voltage_int = (int)voltage;
-      int voltage_dec = (int)((voltage - voltage_int) * 100);
-      sprintf(buf_lcd, "%d.%d", voltage_int, voltage_dec);
-      Lcd_Send_String(buf_lcd);
-      
-      refresh_count = 0;
-    }
-    
   }
   /* USER CODE END 3 */
 }
@@ -143,7 +130,6 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -173,24 +159,9 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
-  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
-  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
-  {
-    Error_Handler();
-  }
 }
 
 /* USER CODE BEGIN 4 */
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-    if (htim->Instance == TIM2)
-    {
-      HAL_GPIO_TogglePin(BUILDIN_LED_GPIO_Port, BUILDIN_LED_Pin);
-      refresh_count++;
-    } 
-}
 
 /* USER CODE END 4 */
 
@@ -201,6 +172,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
+  /* User can add his own implementation to report the HAL error return state */
+  __disable_irq();
+  while (1)
+  {
+  }
   /* USER CODE END Error_Handler_Debug */
 }
 
@@ -215,6 +191,8 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

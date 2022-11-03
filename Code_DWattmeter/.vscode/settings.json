@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "lcd_i2c.h": "c",
+        "gpio.h": "c",
+        "main.h": "c"
+    }
+}
