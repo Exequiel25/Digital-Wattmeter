@@ -106,7 +106,7 @@ int main(void)
 
     HAL_ADC_Start(&hadc1);
     int adc1_value = HAL_ADC_GetValue(&hadc1);
-    float voltage = (float)adc1_value * 3.3 / 4095;
+    float voltage = (float)adc1_value * 3.3 / 4096;
     if (voltage > 2.5)
     {
       HAL_GPIO_WritePin(ALERT_LED_GPIO_Port, ALERT_LED_Pin, GPIO_PIN_SET);
@@ -123,9 +123,11 @@ int main(void)
       sprintf(buf_lcd, "ADC:%u", adc1_value);
       Lcd_Send_String(buf_lcd);
       Lcd_Set_Cursor(2,1);
-      int voltage_int = (int)voltage;
-      int voltage_dec = (int)((voltage - voltage_int) * 100);
-      sprintf(buf_lcd, "%d.%d", voltage_int, voltage_dec);
+      // sprintf(buf_lcd, "V:%.2f", voltage);
+      int voltage_int = (int)(voltage);
+      int voltage_dec1 = (int)((voltage - voltage_int) * 10);
+      int voltage_dec2 = (int)((voltage - voltage_int - voltage_dec1 / 10.0) * 100);
+      sprintf(buf_lcd, "V:%d.%d%d", voltage_int, voltage_dec1, voltage_dec2);
       Lcd_Send_String(buf_lcd);
       
       refresh_count = 0;
