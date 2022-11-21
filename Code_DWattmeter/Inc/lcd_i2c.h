@@ -7,6 +7,7 @@ void Lcd_Init(void);
 void Lcd_Send_Cmd(char cmd);
 void Lcd_Send_Char(char data);
 void Lcd_Send_String(char *str);
+void Lcd_Send_Float(float num, int decimals);
 void Lcd_Set_Cursor(int row, int col);
 void Lcd_Clear(void);
 void Lcd_Shift_Right(void);

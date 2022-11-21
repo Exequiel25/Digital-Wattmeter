@@ -3,14 +3,19 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "fatfs.h"
 #include "i2c.h"
+#include "rtc.h"
+#include "spi.h"
 #include "tim.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+// #include <stdio.h>
+#include "lcd_i2c.h"  // LCD library
+#include <math.h>
 #include <stdio.h>
-#include "lcd_i2c.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -19,6 +24,16 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+FATFS fs; // File system object
+FIL fil;  // File object
+// Capacity and free space
+FATFS *pfs;
+DWORD fre_clust;
+uint32_t free_space;
+
+// RTC
+RTC_TimeTypeDef sTime;
+RTC_DateTypeDef sDate;
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -28,10 +43,32 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint8_t refresh_count = 0;
-char buf_lcd[18];
+uint8_t menu = 0;
+uint8_t write_sd = 0;
 
-const char phi[8] = {0x04, 0x04, 0x0E, 0x15, 0x15, 0x0E, 0x04, 0x04};
+const uint16_t adc_cross_zero_v = 2270;
+const uint16_t adc_cross_zero_i = 1541;
+const uint16_t max_samples = 2814;
+
+uint8_t frecuency = 50;
+uint16_t sample_count = 0;  // It must be same size as max_samples
+
+uint16_t adc1_value = 0;
+uint16_t adc2_value = 0;
+uint16_t last_adc_value[] = {0, 0}; // 0: V, 1: I
+
+float voltage_sum = 0;
+float RMS_voltage = 0;
+float current_sum = 0;
+float RMS_current = 0;
+
+float P = 0;
+float power_sum = 0;
+
+float S = 0;
+float Q = 0;
+float PF = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -71,29 +108,69 @@ int main(void)
   MX_I2C1_Init();
   MX_ADC1_Init();
   MX_TIM2_Init();
+  MX_ADC2_Init();
+  MX_TIM3_Init();
+  MX_TIM1_Init();
+  MX_SPI2_Init();
+  MX_FATFS_Init();
+  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
+  // Function to calibrate ADC
+  HAL_ADCEx_Calibration_Start(&hadc1);
+  HAL_ADCEx_Calibration_Start(&hadc2);
+  HAL_Delay(100);
 
-  HAL_TIM_Base_Start_IT(&htim2);
-  HAL_ADC_Start(&hadc1);
-
+  // Init LCD
   Lcd_Init();
   Lcd_Clear();
-	Lcd_CGRAM_CreateChar(0, phi);
   
-  Lcd_Set_Cursor(1,0);
+  // Print fixed messages
+  Lcd_Set_Cursor(1,1);
   Lcd_Send_String("V=");
-  // Lcd_Set_Cursor(2,0);
-  // Lcd_Send_String("I=");
-  // Lcd_Set_Cursor(1,7);
-  // Lcd_Send_String("P=");
-  // Lcd_Set_Cursor(2,7);
-  // Lcd_CGRAM_WriteChar(0);
+  Lcd_Set_Cursor(2,1);
+  Lcd_Send_String("I=");
+  Lcd_Set_Cursor(1,14);
+  Lcd_Send_String("Hz");
+  Lcd_Set_Cursor(2,16);
+  Lcd_Send_String("W");
 
-  // Lcd_Set_Cursor(1,11);
-  // Lcd_Send_String("S=");
-  // Lcd_Set_Cursor(2,11);
-  // Lcd_Send_String("f=");
+  // Init SD card
+  if (f_mount(&fs, "", 1) != FR_OK) {
+    Lcd_Set_Cursor(1,1);
+    Lcd_Send_String("SD error");
+    HAL_Delay(1500);
+  }
+  // Check card capacity
+  f_getfree("", &fre_clust, &pfs);
+  // total = (uint32_t)((pfs->n_fatent - 2) * pfs->csize * 0.5);
+  free_space = (uint32_t)(fre_clust * pfs->csize * 0.5);
+  if (free_space < 100) {
+    Lcd_Set_Cursor(1,1);
+    Lcd_Send_String("SD full");
+    HAL_Delay(1500);
+  }
 
+  // HAL_GPIO_WritePin(ALERT_LED_GPIO_Port, ALERT_LED_Pin, GPIO_PIN_SET);
+
+  // Check if SD is workink ONLY DEBUG
+  // if (f_open(&fil, "debug.txt", FA_OPEN_ALWAYS | FA_WRITE | FA_READ) != FR_OK) {
+  //   Lcd_Set_Cursor(1,1);
+  //   Lcd_Send_String("File error");
+  //   HAL_Delay(1500);
+  // }
+  // // Go to end of file
+  // f_lseek(&fil, fil.fsize);
+  // // Write header
+  // f_puts("Debugging SD Card\n", &fil);
+  // f_close(&fil);
+
+  // HAL_GPIO_WritePin(ALERT_LED_GPIO_Port,ALERT_LED_Pin, GPIO_PIN_RESET);
+
+  // Start TMR2: refresh LCD
+  HAL_TIM_Base_Start_IT(&htim2);
+  // Start TMR3: ADC sampling
+  HAL_TIM_Base_Start_IT(&htim3);
+  
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -104,35 +181,79 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
+    // Start ADC1: Current
     HAL_ADC_Start(&hadc1);
-    int adc1_value = HAL_ADC_GetValue(&hadc1);
-    float voltage = (float)adc1_value * 3.3 / 4096;
-    if (voltage > 2.5)
-    {
-      HAL_GPIO_WritePin(ALERT_LED_GPIO_Port, ALERT_LED_Pin, GPIO_PIN_SET);
+    // Start ADC2: Voltage
+    HAL_ADC_Start(&hadc2);
+
+    // Read ADC1: Current
+    adc1_value = HAL_ADC_GetValue(&hadc1);
+    // Read ADC2: Voltage
+    adc2_value = HAL_ADC_GetValue(&hadc2);
+
+    // Calculate frecuency
+    if (adc2_value == adc_cross_zero_v && last_adc_value[0] < adc_cross_zero_v) {
+      // Start timer 1 if timer has been stopped
+      if ( (htim1.Instance->CR1) & (TIM_CR1_CEN == 0) ) {
+        HAL_TIM_Base_Start_IT(&htim1);
+      }
+      else {
+        // Stop timer 1 if timer has been started
+        HAL_TIM_Base_Stop_IT(&htim1);
+        uint16_t timer1_value = __HAL_TIM_GET_COUNTER(&htim1);
+        // Calculate frequency
+        frecuency = (uint8_t)( (72000000 / 16) / timer1_value );
+        __HAL_TIM_SET_COUNTER(&htim1, 0);
+      }
     }
-    else
+    if (write_sd == 1)
     {
+      // Stop timer 2 and 3
+      HAL_TIM_Base_Stop_IT(&htim2);
+      HAL_TIM_Base_Stop_IT(&htim3);
+      // Disable GPIO exti interrupt 9:5
+      HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
+      
+      HAL_GPIO_WritePin(ALERT_LED_GPIO_Port, ALERT_LED_Pin, GPIO_PIN_SET);
+      // Write SD
+      if (f_open(&fil, "data.csv", FA_OPEN_ALWAYS | FA_WRITE | FA_READ) != FR_OK) {
+        Lcd_Set_Cursor(1,1);
+        Lcd_Send_String("File error");
+        HAL_Delay(1500);
+      }
+      // Go to end of file
+      f_lseek(&fil, fil.fsize);
+      // header
+      // f_puts("FECHA;Vrms;Irms;S;P;Q;FP;frec;\n", &fil);
+
+      // Get date and time
+      HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
+      HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+
+      char buffer[100];
+      sprintf(buffer, "%d/%d/%d-%d:%d;%d.%d%d;%d.%d%d;%d.%d%d;%d.%d%d;%d.%d%d;%d.%d%d;%d;\n",
+        sDate.Date, sDate.Month, sDate.Year, sTime.Hours, sTime.Minutes,
+        (uint8_t) RMS_voltage, (uint8_t) (RMS_voltage * 10) % 10, (uint8_t) (RMS_voltage * 100) % 10,
+        (uint8_t) RMS_current, (uint8_t) (RMS_current * 10) % 10, (uint8_t) (RMS_current * 100) % 10,
+        (uint8_t) S, (uint8_t) (S * 10) % 10, (uint8_t) (S * 100) % 10,
+        (uint8_t) P, (uint8_t) (P * 10) % 10, (uint8_t) (P * 100) % 10,
+        (uint8_t) Q, (uint8_t) (Q * 10) % 10, (uint8_t) (Q * 100) % 10,
+        (uint8_t) PF, (uint8_t) (PF * 10) % 10, (uint8_t) (PF * 100) % 10,
+        frecuency
+        );
+      f_puts(buffer, &fil);
+
+      f_close(&fil);
+      
+      write_sd = 0;
+
+      // Enable GPIO exti interrupt 9:5
+      HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+      // Continue timer 2 and 3
+      HAL_TIM_Base_Start_IT(&htim2);
+      HAL_TIM_Base_Start_IT(&htim3);
       HAL_GPIO_WritePin(ALERT_LED_GPIO_Port, ALERT_LED_Pin, GPIO_PIN_RESET);
     }
-
-    if (refresh_count == 2)
-    {
-      Lcd_Clear();
-      Lcd_Set_Cursor(1,1);
-      sprintf(buf_lcd, "ADC:%u", adc1_value);
-      Lcd_Send_String(buf_lcd);
-      Lcd_Set_Cursor(2,1);
-      // sprintf(buf_lcd, "V:%.2f", voltage);
-      int voltage_int = (int)(voltage);
-      int voltage_dec1 = (int)((voltage - voltage_int) * 10);
-      int voltage_dec2 = (int)((voltage - voltage_int - voltage_dec1 / 10.0) * 100);
-      sprintf(buf_lcd, "V:%d.%d%d", voltage_int, voltage_dec1, voltage_dec2);
-      Lcd_Send_String(buf_lcd);
-      
-      refresh_count = 0;
-    }
-    
   }
   /* USER CODE END 3 */
 }
@@ -150,10 +271,11 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
@@ -175,8 +297,9 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
-  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_RTC|RCC_PERIPHCLK_ADC;
+  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV8;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -189,9 +312,113 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM2)
     {
-      HAL_GPIO_TogglePin(BUILDIN_LED_GPIO_Port, BUILDIN_LED_Pin);
-      refresh_count++;
-    } 
+    HAL_GPIO_TogglePin(BUILDIN_LED_GPIO_Port, BUILDIN_LED_Pin);
+
+      
+      if (menu == 0)
+      {
+        // Clear voltage LCD
+        Lcd_Set_Cursor(1,3);
+        Lcd_Send_String("      ");
+        Lcd_Set_Cursor(2,3);
+        Lcd_Send_String("      ");
+
+        // Print values
+        Lcd_Set_Cursor(1,3);
+        Lcd_Send_Float(RMS_voltage,2);
+        Lcd_Set_Cursor(2,3);
+        Lcd_Send_Float(RMS_current,2);
+        Lcd_Set_Cursor(1,10);
+        Lcd_Send_Float(frecuency,0);
+      }
+      else
+      {
+        // Clear voltage LCD
+        Lcd_Set_Cursor(1,3);
+        Lcd_Send_String("      ");
+        Lcd_Set_Cursor(2,3);
+        Lcd_Send_String("      ");
+
+        // Print values
+        Lcd_Set_Cursor(1,3);
+        Lcd_Send_Float(S,2);
+        Lcd_Set_Cursor(2,3);
+        Lcd_Send_Float(Q,2);
+        Lcd_Set_Cursor(1,12);
+        Lcd_Send_Float(PF,2);
+      }
+
+      Lcd_Set_Cursor(2,9);
+      Lcd_Send_Float(P,2);
+    }
+    else if (htim->Instance == TIM3)
+    {
+      if (sample_count < max_samples)
+      {
+        sample_count++;
+        voltage_sum += (adc2_value - adc_cross_zero_v);
+        current_sum += (adc1_value - adc_cross_zero_i);
+        power_sum += (adc2_value - adc_cross_zero_v) * (adc1_value - adc_cross_zero_i);
+      }
+      else
+      {
+        RMS_voltage = sqrt(voltage_sum * (317.77 / 1205) / max_samples);
+        RMS_current = sqrt(current_sum * (0.622 / 112) / max_samples);
+        P = power_sum * (317.77 / 1205) * (0.622 / 112) / max_samples;
+
+        S = RMS_voltage * RMS_current;
+        Q = sqrt( (S * S) - (P * P) );
+        PF = P / S;
+
+        // Reset all variables
+        sample_count = 0;
+        voltage_sum = 0;
+        current_sum = 0;
+        power_sum = 0;
+      }
+    }
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == MOD_MENU_Pin)
+  {
+    if (menu == 1)
+    {
+      menu = 0;
+
+      // Print fixed messages
+      Lcd_Set_Cursor(1,1);
+      Lcd_Send_String("V=");
+      Lcd_Set_Cursor(2,1);
+      Lcd_Send_String("I=");
+      Lcd_Set_Cursor(1,9);
+      Lcd_Send_String("f");
+      Lcd_Set_Cursor(1,14);
+      Lcd_Send_String("Hz");
+      Lcd_Set_Cursor(2,16);
+      Lcd_Send_String("W");
+    }
+    else
+    {
+      menu = 1;
+
+      // Print fixed messages
+      Lcd_Set_Cursor(1,1);
+      Lcd_Send_String("S=");
+      Lcd_Set_Cursor(2,1);
+      Lcd_Send_String("Q=");
+      Lcd_Set_Cursor(1,9);
+      Lcd_Send_String("Fp=");
+      Lcd_Set_Cursor(2,16);
+      Lcd_Send_String("W");
+    }
+  }
+  if (GPIO_Pin == WRITE_SD_Pin)
+  {
+    if (write_sd == 0)
+      write_sd = 1;
+  }
 }
 
 /* USER CODE END 4 */

@@ -2,6 +2,18 @@
     "files.associations": {
         "lcd_i2c.h": "c",
         "gpio.h": "c",
-        "main.h": "c"
+        "main.h": "c",
+        "tim.h": "c",
+        "adc.h": "c",
+        "i2c.h": "c",
+        "fatfs.h": "c",
+        "ff.h": "c",
+        "ff_gen_drv.h": "c",
+        "integer.h": "c",
+        "ffconf.h": "c",
+        "stm32f1xx_hal.h": "c",
+        "diskio.h": "c",
+        "user_diskio.h": "c",
+        "fatfs_sd.h": "c"
     }
 }

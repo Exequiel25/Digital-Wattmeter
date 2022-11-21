@@ -1,5 +1,6 @@
 #include "i2c.h"
 #include "lcd_i2c.h"
+#include <stdio.h>
 
 void Lcd_Send_Cmd(char cmd)
 {
@@ -69,6 +70,38 @@ void Lcd_Set_Cursor(int row, int col)
 void Lcd_Send_String(char *str)
 {
 	while(*str) Lcd_Send_Char(*str++);
+}
+
+// void Lcd_Send_Float(float num)
+// {
+// 	char buf[10];
+// 	int num_int = (int)(num);
+// 	int num_dec1 = (int)((num - num_int) * 10);
+// 	int num_dec2 = (int)((num - num_int - num_dec1 / 10.0) * 100);
+// 	sprintf(buf, "%d.%d%d", num_int, num_dec1, num_dec2);
+// 	Lcd_Send_String(buf);
+// }
+
+void Lcd_Send_Float(float num, int decimals)
+{
+	char buf[10];
+	int num_int = (int)(num);
+	if (decimals == 0)
+	{
+		sprintf(buf, "%d", num_int);
+	}
+	else if (decimals == 1)
+	{
+		int num_dec1 = (int)((num - num_int) * 10);
+		sprintf(buf, "%d.%d", num_int, num_dec1);
+	}
+	else if (decimals == 2)
+	{
+		int num_dec1 = (int)((num - num_int) * 10);
+		int num_dec2 = (int)((num - num_int - num_dec1 / 10.0) * 100);
+		sprintf(buf, "%d.%d%d", num_int, num_dec1, num_dec2);
+	}
+	Lcd_Send_String(buf);
 }
 
 void Lcd_Shift_Right(void)
