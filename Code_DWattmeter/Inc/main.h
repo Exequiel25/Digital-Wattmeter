@@ -59,16 +59,16 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define BUILDIN_LED_Pin GPIO_PIN_13
 #define BUILDIN_LED_GPIO_Port GPIOC
-#define MOD_MENU_Pin GPIO_PIN_6
-#define MOD_MENU_GPIO_Port GPIOA
-#define MOD_MENU_EXTI_IRQn EXTI9_5_IRQn
-#define WRITE_SD_Pin GPIO_PIN_7
-#define WRITE_SD_GPIO_Port GPIOA
-#define WRITE_SD_EXTI_IRQn EXTI9_5_IRQn
+#define WRITE_SD_Pin GPIO_PIN_10
+#define WRITE_SD_GPIO_Port GPIOB
+#define WRITE_SD_EXTI_IRQn EXTI15_10_IRQn
 #define ALERT_LED_Pin GPIO_PIN_12
 #define ALERT_LED_GPIO_Port GPIOB
 #define SD_CS_Pin GPIO_PIN_8
 #define SD_CS_GPIO_Port GPIOA
+#define MOD_MENU_Pin GPIO_PIN_15
+#define MOD_MENU_GPIO_Port GPIOA
+#define MOD_MENU_EXTI_IRQn EXTI15_10_IRQn
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

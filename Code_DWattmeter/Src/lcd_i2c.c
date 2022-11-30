@@ -101,6 +101,13 @@ void Lcd_Send_Float(float num, int decimals)
 		int num_dec2 = (int)((num - num_int - num_dec1 / 10.0) * 100);
 		sprintf(buf, "%d.%d%d", num_int, num_dec1, num_dec2);
 	}
+	else if (decimals == 3)
+	{
+		int num_dec1 = (int)((num - num_int) * 10);
+		int num_dec2 = (int)((num - num_int - num_dec1 / 10.0) * 100);
+		int num_dec3 = (int)((num - num_int - num_dec1 / 10.0 - num_dec2 / 100.0) * 1000);
+		sprintf(buf, "%d.%d%d%d", num_int, num_dec1, num_dec2, num_dec3);
+	}
 	Lcd_Send_String(buf);
 }
 
