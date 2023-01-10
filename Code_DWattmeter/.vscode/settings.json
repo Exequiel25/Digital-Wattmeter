@@ -14,6 +14,7 @@
         "stm32f1xx_hal.h": "c",
         "diskio.h": "c",
         "user_diskio.h": "c",
-        "fatfs_sd.h": "c"
+        "fatfs_sd.h": "c",
+        "spi.h": "c"
     }
 }
